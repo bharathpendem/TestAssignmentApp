@@ -1,0 +1,56 @@
+trigger:
+  branches:
+    include:
+      - main
+variables:
+  acrName: 'cgidevopsdemo'
+  imageName: 'cgi-demo'
+  imageTag: '$(Build.BuildId)'
+
+stages:
+  - stage: DeployAPItoAKS
+    displayName: 'Deploy AKS Cluster'
+    jobs:
+      - job: CreateAKS
+        displayName: 'Create AKS Cluster'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - task: Maven@3
+            displayName: 'Build Java Project'
+            inputs:
+              mavenPomFile: '$(Build.SourcesDirectory)/pom.xml'
+              options: '-DskipTests'
+              goals: 'package'
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Artifact'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)'
+              artifact: 'drop'
+          - task: Docker@2
+            displayName: 'Build Docker Image'
+            inputs:
+              containerRegistry: 'IN - IN002_1066_26300 - GTO-DSF'
+              repository: '$(acrName)/$(imageName)'
+              command: 'build'
+              Dockerfile: 'path_to_your_Dockerfile'
+              tags: '$(imageTag)'
+          - task: Docker@2
+            displayName: 'Push Docker Image to ACR'
+            inputs:
+              containerRegistry: 'your_acr_connection_name'
+              repository: '$(acrName)/$(imageName)'
+              command: 'push'
+              tags: '$(imageTag)'
+
+          - task: AzureCLI@2
+            displayName: 'Azure CLI - AKS Create'
+            inputs:
+              azureSubscription: 'IN - IN002_1066_26300 - GTO-DSF'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Create AKS cluster
+                az group create --name $(var_resource_group_name) --location $(location)
+                az aks create --resource-group $(var_resource_group_name) --name $(aksClusterName) --node-count 1 --generate-ssh-keys
